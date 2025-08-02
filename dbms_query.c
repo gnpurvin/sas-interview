@@ -29,11 +29,13 @@ typedef struct {
     size_t end;
 } Range;
 
-const char* k_functionMapping[DBMS_MAX] = {"substr", "substring", "sbstr"};
+static const char* k_functionMapping[DBMS_MAX] = {"substr", "substring",
+                                                  "sbstr"};
 
-// if next char is
-bool checkMatch(const char* pQuery, size_t queryIndex, size_t substrIndex,
-                Range* range, size_t numMatches, bool isPossibleMatch[]) {
+// if current char is (, check if we've hit a match
+static bool checkMatch(const char* pQuery, size_t queryIndex,
+                       size_t substrIndex, Range* range, size_t numMatches,
+                       bool isPossibleMatch[]) {
     // looking for the ( before we check if we've found a full match
     if (pQuery[queryIndex] != '(') {
         return false;
@@ -58,8 +60,8 @@ bool checkMatch(const char* pQuery, size_t queryIndex, size_t substrIndex,
 // compare the char at index pQuery[queryIndex] to each char from
 // k_functionMapping at index substrIndex if the char is NOT a match, set
 // isPossibleMatch to false
-bool isCurrentCharMatch(const char* pQuery, size_t queryIndex,
-                        size_t substrIndex, bool isPossibleMatch[]) {
+static bool isCurrentCharMatch(const char* pQuery, size_t queryIndex,
+                               size_t substrIndex, bool isPossibleMatch[]) {
     bool isMatch = false;
     for (DbmsType possibleDbms = DBMS_1; possibleDbms < DBMS_MAX;
          possibleDbms++) {
@@ -84,7 +86,7 @@ bool isCurrentCharMatch(const char* pQuery, size_t queryIndex,
     return isMatch;
 }
 
-void rebuildQuery(char* pQuery, DbmsType dbms) {
+static void rebuildQuery(char* pQuery, DbmsType dbms) {
     printf("\nenter\n");
     if (!pQuery) {
         printf("Null query provided");
@@ -109,7 +111,6 @@ void rebuildQuery(char* pQuery, DbmsType dbms) {
     size_t numMatches = 0;
     size_t bufferSize = strlen(pQuery) + 1;
     bool isPossibleMatch[DBMS_MAX] = {true, true, true};
-    bool allMatches[DBMS_MAX] = {true, true, true};
 
     for (size_t queryIndex = 0; queryIndex < strlen(pQuery); queryIndex++) {
         // if we hit a match, save the range to our list
@@ -124,7 +125,8 @@ void rebuildQuery(char* pQuery, DbmsType dbms) {
             range.begin = 0;
             range.end = 0;
             // reset array of matches
-            memcpy(isPossibleMatch, allMatches, sizeof(isPossibleMatch));
+            memset(isPossibleMatch, true,
+                   sizeof(isPossibleMatch) / sizeof(bool));
             continue;
         }
         // parsing through char by char
@@ -134,7 +136,8 @@ void rebuildQuery(char* pQuery, DbmsType dbms) {
         } else {
             substrIndex = 0;
             // reset array of matches
-            memcpy(isPossibleMatch, allMatches, sizeof(isPossibleMatch));
+            memset(isPossibleMatch, true,
+                   sizeof(isPossibleMatch) / sizeof(bool));
         }
     }
 
@@ -153,7 +156,16 @@ int main() {
     rebuildQuery("aasubstring(aa)aa", DBMS_1);
     rebuildQuery("aasubstr(aa)aa", DBMS_1);
     rebuildQuery("aasbstr(aa)aa", DBMS_1);
-    // multiple matches
+
+    // multiple matches for same substring function
+    rebuildQuery("aasubstring(aa)aasubstring(aa)", DBMS_1);
+    rebuildQuery("aasubstr(aa)aasubstr(aa)", DBMS_1);
+    rebuildQuery("aasbstr(aa)aasbstr(aa)", DBMS_1);
+
+    // multiple matches for differing substring function
+    rebuildQuery("aasubstring(aa)aasubstr(aa)sbstr(aa)", DBMS_1);
+    rebuildQuery("aasubstr(aa)aasbstr(aa)substring(aa)", DBMS_1);
+    rebuildQuery("aasbstr(aa)aasubstring(aa)substr(aa)", DBMS_1);
 
     // edge cases
     // 1. mixing 2 substring functions
@@ -162,5 +174,12 @@ int main() {
     rebuildQuery("aasubstrin(aa)aa", DBMS_1);
     rebuildQuery("aasubst(aa)aa", DBMS_1);
     rebuildQuery("aasbst(aa)aa", DBMS_1);
+    rebuildQuery("aaubstring(aa)aa", DBMS_1);
+    rebuildQuery("aaubstr(aa)aa", DBMS_1);
+    rebuildQuery("aabstr(aa)aa", DBMS_1);
+    // 3. missing (
+    rebuildQuery("aasubstringaa)aa", DBMS_1);
+    rebuildQuery("aasubstraa)aa", DBMS_1);
+    rebuildQuery("aasbstraa)aa", DBMS_1);
     return 0;
 }
