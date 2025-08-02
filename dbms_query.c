@@ -109,8 +109,9 @@ static char* rebuildQuery(char* pQuery, DbmsType dbms) {
     }
 
     // a simpler way would be to use strstr to search for each substring
-    // function. however for really large strings, this would be inefficient, so
-    // instead we'll try to look for all 3 simultaneously character by character
+    // function. however, for really large strings, this would be inefficient,
+    // so instead we'll try to look for all 3 simultaneously character by
+    // character
     size_t substrIndex = 0;
     Range range = {0};
     size_t numMatches = 0;
@@ -133,17 +134,16 @@ static char* rebuildQuery(char* pQuery, DbmsType dbms) {
             substrIndex = 0;
             // cat the string from before our match to the buffer
             size_t beforeSubstringLen = (range.begin) - firstUncheckedCharIndex;
-            // if not the first match, -1 so we exclude the beginning of the
-            // match
+            // strncat adds null terminator for us
             strncat(pBuffer, pQueryIt, beforeSubstringLen);
             // cat the proper substring function to the buffer
             strncat(pBuffer, k_functionMapping[dbms],
                     strlen(k_functionMapping[dbms]));
-            // reset our range
-            // + 1 to pQueryIt and firstUncheckedCharIndex to skip the last char
-            // of the replaced substring function
+            // move pQueryIt forward past our match
             pQueryIt += (range.end - firstUncheckedCharIndex) + 1;
+            // +1 so we aren't incluiding range.end
             firstUncheckedCharIndex = range.end + 1;
+            // reset our range
             range.begin = 0;
             range.end = 0;
             numMatches++;
