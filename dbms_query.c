@@ -31,21 +31,22 @@ typedef struct {
 
 const char* k_functionMapping[DBMS_MAX] = {"substr", "substring", "sbstr"};
 
+// if next char is
 bool checkMatch(const char* pQuery, size_t queryIndex, size_t substrIndex,
-                Range* range, size_t numMatches) {
+                Range* range, size_t numMatches, bool isPossibleMatch[]) {
     // looking for the ( before we check if we've found a full match
-    if (pQuery[queryIndex + 1] != '(') {
+    if (pQuery[queryIndex] != '(') {
         return false;
     }
     for (DbmsType possibleDbms = DBMS_1; possibleDbms < DBMS_MAX;
          possibleDbms++) {
         // if we've found all chars in one of the substring functions, and
         // the next char is a (, then we've hit a match
-        if (substrIndex == strlen(k_functionMapping[possibleDbms]) - 1) {
+        if (isPossibleMatch[possibleDbms] &&
+            substrIndex == strlen(k_functionMapping[possibleDbms])) {
             // match
+            range->end = queryIndex - 1;  // -1 to account for the (
             range->begin = queryIndex - substrIndex;
-            range->end = queryIndex;
-            substrIndex = 0;  // reset for next match
             printf("match found. begin: %lu end %lu\n", range->begin,
                    range->end);
             return true;  // match found
@@ -54,6 +55,9 @@ bool checkMatch(const char* pQuery, size_t queryIndex, size_t substrIndex,
     return false;  // no match found
 }
 
+// compare the char at index pQuery[queryIndex] to each char from
+// k_functionMapping at index substrIndex if the char is NOT a match, set
+// isPossibleMatch to false
 bool isCurrentCharMatch(const char* pQuery, size_t queryIndex,
                         size_t substrIndex, bool isPossibleMatch[]) {
     bool isMatch = false;
@@ -81,6 +85,7 @@ bool isCurrentCharMatch(const char* pQuery, size_t queryIndex,
 }
 
 void rebuildQuery(char* pQuery, DbmsType dbms) {
+    printf("\nenter\n");
     if (!pQuery) {
         printf("Null query provided");
         return;
@@ -100,16 +105,16 @@ void rebuildQuery(char* pQuery, DbmsType dbms) {
     // function. however for really large strings, this would be inefficient, so
     // instead we'll try to look for all 3 simultaneously character by character
     size_t substrIndex = 0;
-    // stop searching 1 before end of query, because we want to look ahead 1
-    // char
-    size_t stopSearch = strlen(pQuery) - 1;
     Range range = {0};
     size_t numMatches = 0;
     size_t bufferSize = strlen(pQuery) + 1;
     bool isPossibleMatch[DBMS_MAX] = {true, true, true};
-    for (size_t queryIndex = 0; queryIndex < stopSearch; queryIndex++) {
+    bool allMatches[DBMS_MAX] = {true, true, true};
+
+    for (size_t queryIndex = 0; queryIndex < strlen(pQuery); queryIndex++) {
         // if we hit a match, save the range to our list
-        if (checkMatch(pQuery, queryIndex, substrIndex, &range, numMatches)) {
+        if (checkMatch(pQuery, queryIndex, substrIndex, &range, numMatches,
+                       isPossibleMatch)) {
             substrIndex = 0;
             numMatches++;
             // update buffer size to size of the matched size and add size of
@@ -118,6 +123,8 @@ void rebuildQuery(char* pQuery, DbmsType dbms) {
             bufferSize += strlen(k_functionMapping[dbms]);
             range.begin = 0;
             range.end = 0;
+            // reset array of matches
+            memcpy(isPossibleMatch, allMatches, sizeof(isPossibleMatch));
             continue;
         }
         // parsing through char by char
@@ -126,6 +133,8 @@ void rebuildQuery(char* pQuery, DbmsType dbms) {
             substrIndex++;
         } else {
             substrIndex = 0;
+            // reset array of matches
+            memcpy(isPossibleMatch, allMatches, sizeof(isPossibleMatch));
         }
     }
 
@@ -144,9 +153,14 @@ int main() {
     rebuildQuery("aasubstring(aa)aa", DBMS_1);
     rebuildQuery("aasubstr(aa)aa", DBMS_1);
     rebuildQuery("aasbstr(aa)aa", DBMS_1);
+    // multiple matches
 
     // edge cases
     // 1. mixing 2 substring functions
     rebuildQuery("aasbbstring(aa)aa", DBMS_1);
+    // 2. 1 char off
+    rebuildQuery("aasubstrin(aa)aa", DBMS_1);
+    rebuildQuery("aasubst(aa)aa", DBMS_1);
+    rebuildQuery("aasbst(aa)aa", DBMS_1);
     return 0;
 }
