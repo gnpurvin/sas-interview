@@ -9,11 +9,16 @@
 // 4. that the given query does not contain any of the substring functions as an
 // escaped string. this assumption is for the sake of simplicity.
 // 5. that the given query is valid SQL. again, this is for the sake of
-// simplicity
+// simplicity.
 // 6. that the size of the given query can be contained in size_t
+// 7. that the query is in all lowercase. again, assumed for the sake of
+// simplicity
+// 8. assume that we're not in a situation where memory is very expensive
+// 9. caller is responsible for freeing the returned string
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef enum {
@@ -49,8 +54,8 @@ static bool checkMatch(const char* pQuery, size_t queryIndex,
             // match
             range->end = queryIndex - 1;  // -1 to account for the (
             range->begin = queryIndex - substrIndex;
-            printf("match found. begin: %lu end %lu\n", range->begin,
-                   range->end);
+            // printf("match found. begin: %lu end %lu\n", range->begin,
+            //        range->end);
             return true;  // match found
         }
     }
@@ -86,21 +91,20 @@ static bool isCurrentCharMatch(const char* pQuery, size_t queryIndex,
     return isMatch;
 }
 
-static void rebuildQuery(char* pQuery, DbmsType dbms) {
-    printf("\nenter\n");
+static char* rebuildQuery(char* pQuery, DbmsType dbms) {
+    // printf("enter\n");
     if (!pQuery) {
         printf("Null query provided");
-        return;
+        return NULL;
     }
     // if the string is too short for the shortest substring function to fit, it
     // definitely isn't in there
     if (strlen(pQuery) < strlen(k_functionMapping[DBMS_3])) {
-        printf("Empty query provided");
-        return;
+        return pQuery;
     }
     if (dbms < DBMS_1 || dbms >= DBMS_MAX) {
         printf("Unsupported DBMS type provided");
-        return;
+        return NULL;
     }
 
     // a simpler way would be to use strstr to search for each substring
@@ -109,24 +113,47 @@ static void rebuildQuery(char* pQuery, DbmsType dbms) {
     size_t substrIndex = 0;
     Range range = {0};
     size_t numMatches = 0;
-    size_t bufferSize = strlen(pQuery) + 1;
     bool isPossibleMatch[DBMS_MAX] = {true, true, true};
-
+    // if we need to conserve memory, our allocation strategy should be
+    // revisited. for now, since it's a common strategy to just double the size
+    // of your buffer when extending, we'll just go ahead and double it. this
+    // should be sufficient since the worst case increase in space would be
+    // replacing sbstr -> substring, which is replacing 5 chars with 9
+    // if additional DBMSs with different substring functions are supported,
+    // this would need to be revisited
+    // using calloc so we aren't cat-ing to uninitialized memory in the buffer
+    char* pBuffer = (char*)calloc((strlen(pQuery) * 2) + 1, sizeof(char));
+    char* pQueryIt = pQuery;
+    size_t prevRangeEnd = 0;
     for (size_t queryIndex = 0; queryIndex < strlen(pQuery); queryIndex++) {
         // if we hit a match, save the range to our list
         if (checkMatch(pQuery, queryIndex, substrIndex, &range, numMatches,
                        isPossibleMatch)) {
             substrIndex = 0;
-            numMatches++;
-            // update buffer size to size of the matched size and add size of
-            // the replacement string
-            bufferSize -= (range.end - range.end);
-            bufferSize += strlen(k_functionMapping[dbms]);
+            // cat the string from before our match to the buffer
+            size_t beforeSubstring = (range.begin) - prevRangeEnd;
+            // if not the first match, -1 so we exclude the beginning of the
+            // match
+            // beforeSubstring -= numMatches > 0 ? 1 : 0;
+            strncat(pBuffer, pQueryIt, beforeSubstring);
+            // cat the proper substring function to the buffer
+            strncat(pBuffer, k_functionMapping[dbms],
+                    strlen(k_functionMapping[dbms]));
+            printf("pQueryIt %s\n", pQueryIt);
+            printf("curr buffer: %s\n", pBuffer);
+            printf("beforeSubstring %lu, len %lu\n", beforeSubstring,
+                   strlen(k_functionMapping[dbms]));
+            printf("range.begin %lu, range.end %lu\n", range.begin, range.end);
+            // reset our range
+            pQueryIt += (range.end - prevRangeEnd) + 1;
+            prevRangeEnd = range.end + 1;
             range.begin = 0;
             range.end = 0;
+            numMatches++;
             // reset array of matches
             memset(isPossibleMatch, true,
                    sizeof(isPossibleMatch) / sizeof(bool));
+
             continue;
         }
         // parsing through char by char
@@ -141,45 +168,61 @@ static void rebuildQuery(char* pQuery, DbmsType dbms) {
         }
     }
 
-    // TODO: calculate size of the new query and allocate it
-    printf("numMatches = %lu\n", numMatches);
-    printf("bufferSize = %lu\n", bufferSize);
+    // add the rest of the query to our string
+    strncat(pBuffer, pQueryIt, strlen(pQueryIt));
 
-    // TODO: use memcpy to copy from query until beginning of range
-    // then copy k_functionMapping[dbms]
-    // then from end of range to beginning of the next range
-    // then, replace with the appropriate substring command for the given DBMS
+    // TODO: calculate size of the new query and allocate it
+    // printf("numMatches = %lu\n", numMatches);
+    return pBuffer;
+}
+
+void testQuery(char* pTestQuery, DbmsType dbms) {
+    char* pResultQuery = rebuildQuery(pTestQuery, dbms);
+    printf("Fixed query: %s\n", pResultQuery);
+    free(pResultQuery);
 }
 
 int main() {
-    // basic test cases
-    rebuildQuery("aasubstring(aa)aa", DBMS_1);
-    rebuildQuery("aasubstr(aa)aa", DBMS_1);
-    rebuildQuery("aasbstr(aa)aa", DBMS_1);
+    for (DbmsType possibleDbms = DBMS_1; possibleDbms < DBMS_MAX;
+         possibleDbms++) {
+        printf("\nTesting DBMS arg %u\n", possibleDbms);
+        // basic test cases
+        // 1. simple replacement of one substring function
+        printf("\n1. simple replacement of one substring function\n");
+        testQuery("aasubstring(aa)aa", possibleDbms);
+        // testQuery("aasubstr(aa)aa", possibleDbms);
+        // testQuery("aasbstr(aa)aa", possibleDbms);
 
-    // multiple matches for same substring function
-    rebuildQuery("aasubstring(aa)aasubstring(aa)", DBMS_1);
-    rebuildQuery("aasubstr(aa)aasubstr(aa)", DBMS_1);
-    rebuildQuery("aasbstr(aa)aasbstr(aa)", DBMS_1);
+        // 2. multiple matches for same substring function
+        printf("\n2. multiple matches for same substring function\n");
+        testQuery("aasubstring(aa)aasubstring(aa)", possibleDbms);
+        // testQuery("aasubstr(aa)aasubstr(aa)", possibleDbms);
+        // testQuery("aasbstr(aa)aasbstr(aa)", possibleDbms);
 
-    // multiple matches for differing substring function
-    rebuildQuery("aasubstring(aa)aasubstr(aa)sbstr(aa)", DBMS_1);
-    rebuildQuery("aasubstr(aa)aasbstr(aa)substring(aa)", DBMS_1);
-    rebuildQuery("aasbstr(aa)aasubstring(aa)substr(aa)", DBMS_1);
+        // // 3. multiple matches for differing substring function
+        printf("\n3. multiple matches for differing substring function\n");
+        testQuery("aasubstring(aa)aasubstr(aa)sbstr(aa)", possibleDbms);
+        // testQuery("aasubstr(aa)aasbstr(aa)substring(aa)", possibleDbms);
+        // testQuery("aasbstr(aa)aasubstring(aa)substr(aa)", possibleDbms);
 
-    // edge cases
-    // 1. mixing 2 substring functions
-    rebuildQuery("aasbbstring(aa)aa", DBMS_1);
-    // 2. 1 char off
-    rebuildQuery("aasubstrin(aa)aa", DBMS_1);
-    rebuildQuery("aasubst(aa)aa", DBMS_1);
-    rebuildQuery("aasbst(aa)aa", DBMS_1);
-    rebuildQuery("aaubstring(aa)aa", DBMS_1);
-    rebuildQuery("aaubstr(aa)aa", DBMS_1);
-    rebuildQuery("aabstr(aa)aa", DBMS_1);
-    // 3. missing (
-    rebuildQuery("aasubstringaa)aa", DBMS_1);
-    rebuildQuery("aasubstraa)aa", DBMS_1);
-    rebuildQuery("aasbstraa)aa", DBMS_1);
+        // // edge cases
+        // // 1. mixing 2 substring functions
+        // printf("1. mixing 2 substring functions\n");
+        // testQuery("aasbbstring(aa)aa", possibleDbms);
+        // // 2. 1 char off
+        // printf("2. 1 char off\n");
+        // testQuery("aasubstrin(aa)aa", possibleDbms);
+        // testQuery("aasubst(aa)aa", possibleDbms);
+        // testQuery("aasbst(aa)aa", possibleDbms);
+        // testQuery("aaubstring(aa)aa", possibleDbms);
+        // testQuery("aaubstr(aa)aa", possibleDbms);
+        // testQuery("aabstr(aa)aa", possibleDbms);
+        // // 3. missing (
+        // printf("3. missing (\n");
+        // testQuery("aasubstringaa)aa", possibleDbms);
+        // testQuery("aasubstraa)aa", possibleDbms);
+        // testQuery("aasbstraa)aa", possibleDbms);
+    }
+
     return 0;
 }
