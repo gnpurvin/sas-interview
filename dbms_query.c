@@ -55,8 +55,6 @@ static bool checkMatch(const char* pQuery, size_t queryIndex,
             // match
             range->end = queryIndex - 1;  // -1 to account for the (
             range->begin = queryIndex - substrIndex;
-            // printf("match found. begin: %lu end %lu\n", range->begin,
-            //        range->end);
             return true;  // match found
         }
     }
@@ -93,7 +91,6 @@ static bool isCurrentCharMatch(const char* pQuery, size_t queryIndex,
 }
 
 static char* rebuildQuery(char* pQuery, DbmsType dbms) {
-    // printf("enter\n");
     if (!pQuery) {
         printf("Null query provided");
         return NULL;
