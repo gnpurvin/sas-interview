@@ -32,22 +32,52 @@ typedef struct {
 const char* k_functionMapping[DBMS_MAX] = {"substr", "substring", "sbstr"};
 
 bool checkMatch(const char* pQuery, size_t queryIndex, size_t substrIndex,
-                Range* ranges, size_t numMatches) {
+                Range* range, size_t numMatches) {
+    // looking for the ( before we check if we've found a full match
+    if (pQuery[queryIndex + 1] != '(') {
+        return false;
+    }
     for (DbmsType possibleDbms = DBMS_1; possibleDbms < DBMS_MAX;
          possibleDbms++) {
         // if we've found all chars in one of the substring functions, and
         // the next char is a (, then we've hit a match
-        if (substrIndex == strlen(k_functionMapping[possibleDbms]) - 1 &&
-            pQuery[queryIndex + 1] == '(') {
+        if (substrIndex == strlen(k_functionMapping[possibleDbms]) - 1) {
             // match
-            printf("match found\n");
-            ranges[numMatches].begin = queryIndex - substrIndex;
-            ranges[numMatches].end = queryIndex;
+            range->begin = queryIndex - substrIndex;
+            range->end = queryIndex;
             substrIndex = 0;  // reset for next match
-            return true;      // match found
+            printf("match found. begin: %lu end %lu\n", range->begin,
+                   range->end);
+            return true;  // match found
         }
     }
     return false;  // no match found
+}
+
+bool isCurrentCharMatch(const char* pQuery, size_t queryIndex,
+                        size_t substrIndex, bool isPossibleMatch[]) {
+    bool isMatch = false;
+    for (DbmsType possibleDbms = DBMS_1; possibleDbms < DBMS_MAX;
+         possibleDbms++) {
+        // if we've already decided we don't have a match for this DBMS's
+        // substring function, no need to check
+        if (!isPossibleMatch[possibleDbms]) {
+            continue;
+        }
+        // if chars match, this DBMS may be a match
+        if (pQuery[queryIndex] ==
+            k_functionMapping[possibleDbms][substrIndex]) {
+            isMatch = true;
+        } else if (substrIndex > 0) {
+            // if substrIndex is 0, we haven't found any matching characters yet
+            // don't mark as not a match until we've found our first matching
+            // char
+            isPossibleMatch[possibleDbms] = false;
+        } else {
+            // no-op
+        }
+    }
+    return isMatch;
 }
 
 void rebuildQuery(char* pQuery, DbmsType dbms) {
@@ -73,30 +103,26 @@ void rebuildQuery(char* pQuery, DbmsType dbms) {
     // stop searching 1 before end of query, because we want to look ahead 1
     // char
     size_t stopSearch = strlen(pQuery) - 1;
-    Range ranges[10] = {0};  // TODO: just doing this for sake of simplicity.
-                             // really should be a dynamic array
+    Range range = {0};
     size_t numMatches = 0;
+    size_t bufferSize = strlen(pQuery) + 1;
+    bool isPossibleMatch[DBMS_MAX] = {true, true, true};
     for (size_t queryIndex = 0; queryIndex < stopSearch; queryIndex++) {
         // if we hit a match, save the range to our list
-        if (checkMatch(pQuery, queryIndex, substrIndex, ranges, numMatches)) {
+        if (checkMatch(pQuery, queryIndex, substrIndex, &range, numMatches)) {
             substrIndex = 0;
             numMatches++;
+            // update buffer size to size of the matched size and add size of
+            // the replacement string
+            bufferSize -= (range.end - range.end);
+            bufferSize += strlen(k_functionMapping[dbms]);
+            range.begin = 0;
+            range.end = 0;
             continue;
         }
         // parsing through char by char
-        if (pQuery[queryIndex] == k_functionMapping[DBMS_2][substrIndex]) {
-            // printf("substring case, substrIndex = %lu, queryIndex = %lu\n",
-            //        substrIndex, queryIndex);
-            substrIndex++;
-        } else if (pQuery[queryIndex] ==
-                   k_functionMapping[DBMS_1][substrIndex]) {
-            // substr case
-            // printf("substr case, substrIndex = %lu, queryIndex = %lu\n",
-            //        substrIndex, queryIndex);
-            substrIndex++;
-        } else if (pQuery[queryIndex] ==
-                   k_functionMapping[DBMS_3][substrIndex]) {
-            // sbstr case
+        if (isCurrentCharMatch(pQuery, queryIndex, substrIndex,
+                               isPossibleMatch)) {
             substrIndex++;
         } else {
             substrIndex = 0;
@@ -105,21 +131,22 @@ void rebuildQuery(char* pQuery, DbmsType dbms) {
 
     // TODO: calculate size of the new query and allocate it
     printf("numMatches = %lu\n", numMatches);
+    printf("bufferSize = %lu\n", bufferSize);
+
+    // TODO: use memcpy to copy from query until beginning of range
+    // then copy k_functionMapping[dbms]
+    // then from end of range to beginning of the next range
     // then, replace with the appropriate substring command for the given DBMS
-    for (size_t i = 0; i < numMatches; i++) {
-        printf("match: begin = %lu, end = %lu\n", ranges[i].begin,
-               ranges[i].end);
-        // TODO: use memcpy to copy from query until beginning of range
-        // then copy k_functionMapping[dbms]
-        // then from end of range to beginning of the next range
-    }
 }
 
 int main() {
-    printf("hello world\n");
-
+    // basic test cases
     rebuildQuery("aasubstring(aa)aa", DBMS_1);
     rebuildQuery("aasubstr(aa)aa", DBMS_1);
     rebuildQuery("aasbstr(aa)aa", DBMS_1);
+
+    // edge cases
+    // 1. mixing 2 substring functions
+    rebuildQuery("aasbbstring(aa)aa", DBMS_1);
     return 0;
 }
