@@ -16,6 +16,7 @@
 // 8. assume that we're not in a situation where memory is very expensive
 // 9. caller is responsible for freeing the returned string
 
+#include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,8 +36,8 @@ typedef struct {
 } Range;
 
 // mapping of supported DBMSs to their substring function
-static const char* k_functionMapping[DBMS_MAX] = {"substr", "substring",
-                                                  "sbstr"};
+static const char* k_functionMapping[DBMS_MAX] = {"SUBSTR", "SUBSTRING",
+                                                  "SBSTR"};
 
 // if current char is (, check if we've hit a match
 static bool checkMatch(const char* pQuery, size_t queryIndex,
@@ -75,7 +76,7 @@ static bool isCurrentCharMatch(const char* pQuery, size_t queryIndex,
             continue;
         }
         // if chars match, this DBMS may be a match
-        if (pQuery[queryIndex] ==
+        if (toupper(pQuery[queryIndex]) ==
             k_functionMapping[possibleDbms][substrIndex]) {
             isMatch = true;
         } else if (substrIndex > 0) {
@@ -164,13 +165,20 @@ static char* rebuildQuery(char* pQuery, DbmsType dbms) {
 
     // add the rest of the query to our string
     strncat(pBuffer, pQueryIt, strlen(pQueryIt));
-    return pBuffer;
+    // if we didn't find any matches, we don't need to return a new string
+    // so we can free the buffer
+    if (!numMatches) {
+        free(pBuffer);
+        pBuffer = NULL;
+    }
+    // if we didn't find any matches, return NULL
+    return numMatches ? pBuffer : NULL;
 }
 
 void testQuery(char* pTestQuery, DbmsType dbms) {
     char* pResultQuery = rebuildQuery(pTestQuery, dbms);
     printf("original query: %s\n", pTestQuery);
-    printf("Fixed query:    %s\n", pResultQuery);
+    printf("Fixed query:    %s\n", pResultQuery ? pResultQuery : "NULL");
     free(pResultQuery);
 }
 
@@ -181,40 +189,62 @@ int main() {
         // basic test cases
         // 1. simple replacement of one substring function
         printf("\n1. simple replacement of one substring function\n");
-        testQuery("aasubstring(aa)aa", possibleDbms);
-        testQuery("aasubstr(aa)aa", possibleDbms);
-        testQuery("aasbstr(aa)aa", possibleDbms);
+        testQuery("SELECT SUBSTRING('Johnson', 0, 4) FROM EMPLOYEES",
+                  possibleDbms);
+        testQuery("SELECT SUBSTR('Johnson', 0, 4) FROM EMPLOYEES",
+                  possibleDbms);
+        testQuery("SELECT SBSTR('Johnson', 0, 4) FROM EMPLOYEES", possibleDbms);
 
         // 2. multiple matches for same substring function
         printf("\n2. multiple matches for same substring function\n");
-        testQuery("aasubstring(aa)aasubstring(aa)", possibleDbms);
-        testQuery("aasubstr(aa)aasubstr(aa)", possibleDbms);
-        testQuery("aasbstr(aa)aasbstr(aa)", possibleDbms);
+        testQuery(
+            "SELECT SUBSTRING(SUBSTRING('Johnsonberg', 0, 7), 0, 4) FROM "
+            "EMPLOYEES",
+            possibleDbms);
+        testQuery(
+            "SELECT SUBSTR(SUBSTR('Johnsonberg', 0, 7), 0, 4) FROM EMPLOYEES",
+            possibleDbms);
+        testQuery(
+            "SELECT SBSTR(SBSTR('Johnsonberg', 0, 7), 0, 4) FROM EMPLOYEES",
+            possibleDbms);
 
         // // 3. multiple matches for differing substring function
         printf("\n3. multiple matches for differing substring function\n");
-        testQuery("aasubstring(aa)aasubstr(aa)sbstr(aa)", possibleDbms);
-        testQuery("aasubstr(aa)aasbstr(aa)substring(aa)", possibleDbms);
-        testQuery("aasbstr(aa)aasubstring(aa)substr(aa)", possibleDbms);
+        testQuery(
+            "SELECT SUBSTRING(SUBSTR(SBSTR('Johnsonbergville', 0, 10), 0, 7), "
+            "0, 4) FROM EMPLOYEES",
+            possibleDbms);
+        testQuery(
+            "SELECT SUBSTR(SUBSTRING(SBSTR('Johnsonbergville', 0, 10), 0, 7), "
+            "0, 4) FROM EMPLOYEES",
+            possibleDbms);
+        testQuery(
+            "SELECT SBSTR(SUBSTRING(SUBSTR('Johnsonbergville', 0, 10), 0, 7), "
+            "0, 4) FROM EMPLOYEES",
+            possibleDbms);
 
         // negative tests
         printf("\nNegative tests\n");
         // 1. mixing 2 substring functions
         printf("1. mixing 2 substring functions\n");
-        testQuery("aasbbstring(aa)aa", possibleDbms);
+        testQuery("SELECT SBBSTRING('Johnson', 0, 4) FROM EMPLOYEES",
+                  possibleDbms);
         // 2. 1 char off
         printf("2. 1 char off\n");
-        testQuery("aasubstrin(aa)aa", possibleDbms);
-        testQuery("aasubst(aa)aa", possibleDbms);
-        testQuery("aasbst(aa)aa", possibleDbms);
-        testQuery("aaubstring(aa)aa", possibleDbms);
-        testQuery("aaubstr(aa)aa", possibleDbms);
-        testQuery("aabstr(aa)aa", possibleDbms);
+        testQuery("SELECT SUBSTRIN('Johnson', 0, 4) FROM EMPLOYEES",
+                  possibleDbms);
+        testQuery("SELECT SUBST('Johnson', 0, 4) FROM EMPLOYEES", possibleDbms);
+        testQuery("SELECT SBST('Johnson', 0, 4) FROM EMPLOYEES", possibleDbms);
+        testQuery("SELECT UBSTRING('Johnson', 0, 4) FROM EMPLOYEES",
+                  possibleDbms);
+        testQuery("SELECT UBSTR('Johnson', 0, 4) FROM EMPLOYEES", possibleDbms);
+        testQuery("SELECT BSTR('Johnson', 0, 4) FROM EMPLOYEES", possibleDbms);
         // 3. missing (
         printf("3. missing (\n");
-        testQuery("aasubstringaa)aa", possibleDbms);
-        testQuery("aasubstraa)aa", possibleDbms);
-        testQuery("aasbstraa)aa", possibleDbms);
+        testQuery("SELECT SUBSTRING'Johnson', 0, 4) FROM EMPLOYEES",
+                  possibleDbms);
+        testQuery("SELECT SUBSTR'Johnson', 0, 4) FROM EMPLOYEES", possibleDbms);
+        testQuery("SELECT SBSTR'Johnson', 0, 4) FROM EMPLOYEES", possibleDbms);
     }
 
     return 0;
