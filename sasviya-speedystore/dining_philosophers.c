@@ -2,13 +2,12 @@
 
 #include <errno.h>
 #include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
 void* threadFunc(void* arg) {
     if (arg == NULL) {
-        printf("Error: NULL argument passed to threadFunc\n");
+        fprintf(pLogFile, "Error: NULL argument passed to threadFunc\n");
         return NULL;
     }
     int philosopherIndex = *(int*)arg;
@@ -20,45 +19,71 @@ void* threadFunc(void* arg) {
 
     while (runThreads) {
         // simulate thinking
-        int thinkTime = rand() % maxWaitTimeSec + 1;
-        printf("Philosopher %d is thinking for %d seconds\n", philosopherIndex, thinkTime);
+        int thinkTime = rand() % maxThinkTimeSec + 1;
+        fprintf(pLogFile, "Philosopher %d is thinking for %d seconds\n", philosopherIndex, thinkTime);
         sleep(thinkTime);
+        fprintf(pLogFile, "Philosopher %d is hungry and wants to eat\n", philosopherIndex);
 
-        // try to pick up utensils
+        if (!runThreads) {
+            // if we received signal to stop, don't acquire utensils and exit
+            fprintf(pLogFile, "Philosopher %d is exiting without acquiring utensil %d\n", philosopherIndex, first);
+            break;
+        }
 
         // wait for first utensil
         if (!acquireUtensil(philosopherIndex, first)) {
-            printf("A Philosopher %d failed to acquire utensil %d\n", philosopherIndex, first);
+            fprintf(pLogFile, "A Philosopher %d failed to acquire utensil %d\n", philosopherIndex, first);
             // failed to acquire first utensil, just restart loop
             continue;
         }
+        fprintf(pLogFile, "A Philosopher %d has acquired utensil %d\n", philosopherIndex, first);
 
-        printf("A Philosopher %d has acquired utensil %d\n", philosopherIndex, first);
+        if (!runThreads) {
+            // if we received signal to stop, release utensil and exit
+            fprintf(pLogFile, "Philosopher %d is exiting and releasing utensil %d\n", philosopherIndex, first);
+            freeUtensil(philosopherIndex, first);
+            break;
+        }
 
         // wait for second utensil
         if (!acquireUtensil(philosopherIndex, second)) {
             // failed to acquire second utensil, free first and restart loop
-            printf("A Philosopher %d failed to acquire utensil %d\n", philosopherIndex, second);
+            fprintf(pLogFile, "A Philosopher %d failed to acquire utensil %d\n", philosopherIndex, second);
             freeUtensil(philosopherIndex, first);
             continue;
         }
+        fprintf(pLogFile, "A Philosopher %d has utensils %d and %d\n", philosopherIndex, first, second);
 
-        printf("A Philosopher %d has utensils %d and %d\n", philosopherIndex, first, second);
+        if (!runThreads) {
+            // if we received signal to stop, release utensils and exit
+            fprintf(pLogFile, "Philosopher %d is exiting and releasing utensils %d and %d\n", philosopherIndex, first,
+                    second);
+            freeUtensil(philosopherIndex, first);
+            freeUtensil(philosopherIndex, second);
+            break;
+        }
 
         // we have both utensils now, time to eat
-        int eatTime = rand() % maxWaitTimeSec + 1;
-        printf("Philosopher %d is eating for %d seconds\n", philosopherIndex, eatTime);
+        int eatTime = rand() % maxEatTimeSec + 1;
+        printf("Philosopher %d has started eating with utensils %d and %d for %d seconds\n", philosopherIndex, first,
+               second, eatTime);
+        fflush(stdout);
+        fprintf(pLogFile, "Philosopher %d has started eating with utensils %d and %d for %d seconds\n",
+                philosopherIndex, first, second, eatTime);
+        // TODO: do we need to interrupt sleep if we receive signal to stop?
         sleep(eatTime);
 
         // done eating, put down utensils
         freeUtensil(philosopherIndex, first);
         freeUtensil(philosopherIndex, second);
+        fprintf(pLogFile, "Philosopher %d has finished eating and put down utensils %d and %d\n", philosopherIndex,
+                first, second);
     }
     return NULL;
 }
 
 bool acquireUtensil(int philosopherIndex, int utensilIndex) {
-    printf("A Philosopher %d is trying to acquire utensil %d\n", philosopherIndex, utensilIndex);
+    fprintf(pLogFile, "A Philosopher %d is trying to acquire utensil %d\n", philosopherIndex, utensilIndex);
     // wait for utensil to be free
     pthread_mutex_lock(&utensils[utensilIndex].cvMutex);
     int status = pthread_mutex_trylock(&utensils[utensilIndex].mutex);
@@ -78,12 +103,15 @@ bool acquireUtensil(int philosopherIndex, int utensilIndex) {
 
 void freeUtensil(int philosopherIndex, int utensilIndex) {
     printf("Philosopher %d is releasing utensil %d\n", philosopherIndex, utensilIndex);
+    fflush(stdout);
+    fprintf(pLogFile, "Philosopher %d is releasing utensil %d\n", philosopherIndex, utensilIndex);
     pthread_mutex_unlock(&utensils[utensilIndex].mutex);
     pthread_cond_signal(&utensils[utensilIndex].condVar);
 }
 
 void signalHandler(int signal) {
     printf(" received signal %d\n", signal);
+    fprintf(pLogFile, "received signal %d\n", signal);
     runThreads = false;
 }
 
@@ -91,7 +119,14 @@ int main() {
     printf("Enter\n");
     // register signal handler
     signal(SIGINT, signalHandler);
+    signal(SIGTERM, signalHandler);
+
     srand(time(NULL));  // use current time as seed for random generator
+    pLogFile = fopen("output.log", "w");
+    if (pLogFile == NULL) {
+        printf("Error: Unable to open log file\n");
+        return -1;
+    }
 
     for (int i = 0; i < NUM_PHILOSOPHERS; i++) {
         // TODO: do we need to set any attributes related to scheduling to avoid starvation?
@@ -113,6 +148,7 @@ int main() {
         pthread_mutex_destroy(&utensils[i].cvMutex);
         pthread_cond_destroy(&utensils[i].condVar);
     }
+    fclose(pLogFile);
     printf("Exiting\n");
     return 0;
 }

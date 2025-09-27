@@ -3,6 +3,7 @@
 
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 // macros
 #define NUM_PHILOSOPHERS 5
@@ -18,14 +19,14 @@ typedef struct {
 // variables
 static pthread_t philosophers[NUM_PHILOSOPHERS] = {0};
 static Utensil utensils[NUM_PHILOSOPHERS] = {0};
-static int maxWaitTimeSec = 5;
+static int maxThinkTimeSec = 5;
+static int maxEatTimeSec = 5;
 static bool runThreads = true;
+static FILE* pLogFile = NULL;
 
 static void* threadFunc(void* arg);
-
 static bool acquireUtensil(int philosopherIndex, int utensilIndex);
 static void freeUtensil(int philosopherIndex, int utensilIndex);
-
 static void signalHandler(int signal);
 
 int main();

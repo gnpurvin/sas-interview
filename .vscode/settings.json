@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "dining_philosophers.h": "c",
+        "pthread.h": "c"
+    }
+}
