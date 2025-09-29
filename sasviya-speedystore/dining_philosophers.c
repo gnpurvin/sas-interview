@@ -78,6 +78,9 @@ void* thread_func(void* arg) {
         // done eating, put down utensils
         free_utensil(philosopher_index, first);
         free_utensil(philosopher_index, second);
+        printf("Philosopher %d has finished eating and put down utensils %d and %d\n", philosopher_index, first,
+               second);
+        fflush(stdout);
         fprintf(p_log_file, "Philosopher %d has finished eating and put down utensils %d and %d\n", philosopher_index,
                 first, second);
     }
