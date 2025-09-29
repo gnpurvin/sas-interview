@@ -139,8 +139,8 @@ def check_utensils(eating: bool, philo: Philosopher, utensils: list[int], used_u
 
 
 def check_adjacent_philosophers(eating: bool, philo: Philosopher, active_philos: list[Philosopher]):
-    left_philo = Philosopher((philo.index - 1) % 5) # -1 % 5 wraps around to 4
-    right_philo = Philosopher((philo.index + 1) % 5)
+    left_philo = Philosopher((philo.index - 1) % NUM_PHILOSOPHERS) # -1 % 5 wraps around to 4
+    right_philo = Philosopher((philo.index + 1) % NUM_PHILOSOPHERS)
     if eating:
         # need to check if they're eating, because they might be active but not eating if they just set down one utensil
         eating_philos = [philo for philo in active_philos if philo.eating]
