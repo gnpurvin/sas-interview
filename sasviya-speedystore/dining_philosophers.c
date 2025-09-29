@@ -34,7 +34,7 @@ void* thread_func(void* arg) {
         }
 
         // wait for first utensil
-        if (!acquire_utensil(philosopher_index, first)) {
+        if (!acquire_utensil(philosopher_index, first, true /*wait*/)) {
             fprintf(p_log_file, "A Philosopher %d failed to acquire utensil %d\n", philosopher_index, first);
             // failed to acquire first utensil, just restart loop
             continue;
@@ -49,7 +49,7 @@ void* thread_func(void* arg) {
         }
 
         // wait for second utensil
-        if (!acquire_utensil(philosopher_index, second)) {
+        if (!acquire_utensil(philosopher_index, second, false /*don't wait*/)) {
             // failed to acquire second utensil, free first and restart loop
             fprintf(p_log_file, "A Philosopher %d failed to acquire utensil %d\n", philosopher_index, second);
             free_utensil(philosopher_index, first);
@@ -93,7 +93,7 @@ void wait_for_time_or_signal(int philosopher_index, int time) {
     pthread_mutex_unlock(&utensils[philosopher_index].shutdown_mutex);
 }
 
-bool acquire_utensil(int philosopher_index, int utensil_index) {
+bool acquire_utensil(int philosopher_index, int utensil_index, bool wait) {
     fprintf(p_log_file, "A Philosopher %d is trying to acquire utensil %d\n", philosopher_index, utensil_index);
     // wait for utensil to be free
     pthread_mutex_lock(&utensils[utensil_index].cv_mutex);
@@ -102,6 +102,11 @@ bool acquire_utensil(int philosopher_index, int utensil_index) {
         // acquired the utensil
         pthread_mutex_unlock(&utensils[utensil_index].cv_mutex);
         return true;
+    }
+    if (!wait) {
+        // don't wait, just return failure
+        pthread_mutex_unlock(&utensils[utensil_index].cv_mutex);
+        return false;
     }
     // wait to be signaled and release cvMutex
     pthread_cond_wait(&utensils[utensil_index].cond_var, &utensils[utensil_index].cv_mutex);

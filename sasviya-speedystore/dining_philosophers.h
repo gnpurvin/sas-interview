@@ -31,7 +31,7 @@ static FILE* p_log_file = NULL;
 
 static void* thread_func(void* arg);
 static void wait_for_time_or_signal(int philosopher_index, int time);
-static bool acquire_utensil(int philosopher_index, int utensil_index);
+static bool acquire_utensil(int philosopher_index, int utensil_index, bool wait);
 static void free_utensil(int philosopher_index, int utensil_index);
 static void signal_handler(int signal);
 

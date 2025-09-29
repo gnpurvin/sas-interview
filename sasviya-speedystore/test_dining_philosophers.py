@@ -110,9 +110,7 @@ def check_philosopher(eating: bool, philo: Philosopher, utensils: list[int], act
         active_philos.append(philo)
         assert len(active_philos) <= NUM_PHILOSOPHERS, "More active philosophers than total philosophers!"
     else:
-        # allow philosopher to set down their utensil without eating if the script is stopping
-        if not script_stopped:
-            assert philo in active_philos, f"Philosopher {philo.index} tried to stop eating while already not eating!"
+        # allow philosopher to set down their utensil without eating
         try:
             philo = active_philos[active_philos.index(philo)]
         except ValueError:
@@ -132,9 +130,8 @@ def check_utensils(eating: bool, philo: Philosopher, utensils: list[int], used_u
         assert not any(utensil in used_utensils for utensil in utensils), f"Philosopher {philo.index} tried to use a utensil that was already in use!"
         used_utensils.extend(utensils)
     else:
-        # allow philosopher to set down their utensil without eating if the script is stopping
-        if not script_stopped:
-            assert utensils[0] in used_utensils, f"Philosopher {philo.index} tried to return utensil {utensils[0]} that wasn't in use!"
+        # allow philosopher to set down their utensil without eating
+        if utensils[0] in used_utensils:
             used_utensils.remove(utensils[0])
 
 
