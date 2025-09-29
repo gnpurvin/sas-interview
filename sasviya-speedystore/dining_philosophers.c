@@ -24,7 +24,7 @@ void* thread_func(void* arg) {
         printf("Philosopher %d is thinking for %d seconds\n", philosopher_index, think_time);
         fflush(stdout);
         fprintf(p_log_file, "Philosopher %d is thinking for %d seconds\n", philosopher_index, think_time);
-        sleep(think_time);
+        wait_for_time_or_signal(philosopher_index, think_time);
         fprintf(p_log_file, "Philosopher %d is hungry and wants to eat\n", philosopher_index);
 
         if (!run_threads) {
@@ -73,11 +73,8 @@ void* thread_func(void* arg) {
         fflush(stdout);
         fprintf(p_log_file, "Philosopher %d has started eating with utensils %d and %d for %d seconds\n",
                 philosopher_index, first, second, eat_time);
-        struct timespec eat_time_spec;
-        clock_gettime(CLOCK_REALTIME, &eat_time_spec);
-        eat_time_spec.tv_sec += eat_time;
-        pthread_cond_timedwait(&utensils[philosopher_index].shutdown_cond_var,
-                               &utensils[philosopher_index].shutdown_mutex, &eat_time_spec);
+        wait_for_time_or_signal(philosopher_index, eat_time);
+
         // done eating, put down utensils
         free_utensil(philosopher_index, first);
         free_utensil(philosopher_index, second);
@@ -85,6 +82,15 @@ void* thread_func(void* arg) {
                 first, second);
     }
     return NULL;
+}
+
+void wait_for_time_or_signal(int philosopher_index, int time) {
+    struct timespec time_spec;
+    clock_gettime(CLOCK_REALTIME, &time_spec);
+    time_spec.tv_sec += time;
+    pthread_cond_timedwait(&utensils[philosopher_index].shutdown_cond_var, &utensils[philosopher_index].shutdown_mutex,
+                           &time_spec);
+    pthread_mutex_unlock(&utensils[philosopher_index].shutdown_mutex);
 }
 
 bool acquire_utensil(int philosopher_index, int utensil_index) {
