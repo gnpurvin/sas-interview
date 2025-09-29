@@ -175,6 +175,7 @@ int main() {
         pthread_mutex_destroy(&utensils[i].cv_mutex);
         pthread_cond_destroy(&utensils[i].cond_var);
     }
+    fflush(stdout);
     fclose(p_log_file);
     printf("Exiting\n");
     return 0;

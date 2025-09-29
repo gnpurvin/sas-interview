@@ -3,10 +3,10 @@ import subprocess
 from threading import Timer
 
 class Philosopher:
-    def __init__(self, index, used_utensils = None, eating_time = None):
+    def __init__(self, index, used_utensils = None, eating_time = None, eating = False):
         self.index = index
         self.used_utensils = used_utensils
-        self.eating = True
+        self.eating = eating
         self.eating_time = eating_time
         timer_time = eating_time if eating_time else None
         # add a few seconds of buffer to the timer to avoid false positives
@@ -91,21 +91,21 @@ def parse_line(line: str, used_utensils: list[int], active_philos: list[Philosop
 
     # assert that this philosopher is not already eating if they are starting to eat
     # and that they are already eating if they are stopping eating
-    philo = Philosopher(numbers[0], utensils, eating_time)
-    check_philosopher(eating, philo, utensils, active_philos)
+    philo = Philosopher(numbers[0], utensils, eating_time, eating)
+    check_philosopher(philo, utensils, active_philos)
 
     # assert that the utensils are not already in use if they are starting to eat
     # and that they are already in use if they are setting them down
-    check_utensils(eating, philo, utensils, used_utensils, script_stopped)
+    check_utensils(philo, utensils, used_utensils, script_stopped)
 
     # assert that the adjacent philosophers are not eating at the same time
-    check_adjacent_philosophers(eating, philo, active_philos)
+    check_adjacent_philosophers(philo, active_philos)
 
     # TODO: check for starvation - that every philosopher gets to eat a certain fraction of the time
 
 
-def check_philosopher(eating: bool, philo: Philosopher, utensils: list[int], active_philos: list[Philosopher]):
-    if eating:
+def check_philosopher(philo: Philosopher, utensils: list[int], active_philos: list[Philosopher]):
+    if philo.eating:
         assert philo not in active_philos, f"Philosopher {philo.index} tried to eat while already eating!"
         active_philos.append(philo)
         assert len(active_philos) <= NUM_PHILOSOPHERS, "More active philosophers than total philosophers!"
@@ -125,8 +125,8 @@ def check_philosopher(eating: bool, philo: Philosopher, utensils: list[int], act
                 active_philos.remove(philo)
 
 
-def check_utensils(eating: bool, philo: Philosopher, utensils: list[int], used_utensils: list[int], script_stopped: bool):
-    if eating:
+def check_utensils(philo: Philosopher, utensils: list[int], used_utensils: list[int], script_stopped: bool):
+    if philo.eating:
         assert not any(utensil in used_utensils for utensil in utensils), f"Philosopher {philo.index} tried to use a utensil that was already in use!"
         used_utensils.extend(utensils)
     else:
@@ -135,10 +135,10 @@ def check_utensils(eating: bool, philo: Philosopher, utensils: list[int], used_u
             used_utensils.remove(utensils[0])
 
 
-def check_adjacent_philosophers(eating: bool, philo: Philosopher, active_philos: list[Philosopher]):
+def check_adjacent_philosophers(philo: Philosopher, active_philos: list[Philosopher]):
     left_philo = Philosopher((philo.index - 1) % NUM_PHILOSOPHERS) # -1 % 5 wraps around to 4
     right_philo = Philosopher((philo.index + 1) % NUM_PHILOSOPHERS)
-    if eating:
+    if philo.eating:
         # need to check if they're eating, because they might be active but not eating if they just set down one utensil
         eating_philos = [philo for philo in active_philos if philo.eating]
         assert not any(philo in eating_philos for philo in [left_philo, right_philo]), f"Philosopher {philo.index} tried to eat while an adjacent philosopher was eating!"
