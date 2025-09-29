@@ -25,7 +25,7 @@ typedef struct {
 static pthread_t philosophers[NUM_PHILOSOPHERS] = {0};
 static Utensil utensils[NUM_PHILOSOPHERS] = {0};
 static int max_think_time_sec = 5;
-static int max_eat_time_sec = 30;
+static int max_eat_time_sec = 5;
 static bool run_threads = true;
 static FILE* p_log_file = NULL;
 

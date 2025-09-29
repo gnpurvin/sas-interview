@@ -78,7 +78,6 @@ void* thread_func(void* arg) {
         eat_time_spec.tv_sec += eat_time;
         pthread_cond_timedwait(&utensils[philosopher_index].shutdown_cond_var,
                                &utensils[philosopher_index].shutdown_mutex, &eat_time_spec);
-        // sleep(eat_time);
         // done eating, put down utensils
         free_utensil(philosopher_index, first);
         free_utensil(philosopher_index, second);
@@ -146,6 +145,9 @@ int main() {
         utensils[i].shutdown_cond_var = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
         utensils[i].cv_mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
         utensils[i].cond_var = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
+    }
+
+    for (int i = 0; i < NUM_PHILOSOPHERS; i++) {
         pthread_create(&philosophers[i], NULL, thread_func, &utensils[i].index);
     }
 
